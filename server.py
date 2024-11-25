@@ -2,9 +2,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # Librerías
-from ultralytics import YOLO
+from ultralytics import YOLO    #type: ignore
 import cv2
-import requests
+import requests   #type: ignore
 import numpy as np
 
 ## Server configuration
@@ -27,7 +27,7 @@ def url_to_image(url):
         return image
     else:
         return None
-    
+
 # Función para subir la imagen procesada a Oracle Cloud Storage
 def upload_image(bucket_url, image):
     # Convertir la imagen a un formato compatible (PNG)
@@ -78,7 +78,7 @@ def predictJSON():
         score = box.conf[0]  # Confianza
         label = f"Caja ({score:.2f})"
         cv2.rectangle(img_rs, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        cv2.putText(img_rs, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 
+        cv2.putText(img_rs, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (255, 0, 0), 2)
 
     #uploadImage = upload_image(bucketUrl, img_rs)

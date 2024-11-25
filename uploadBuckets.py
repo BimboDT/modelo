@@ -11,7 +11,11 @@ namespace = object_storage_client.get_namespace().data  # Obtén el namespace en
 bucket_name = 'fotos-web'
 compartment_id=config['tenancy']
 file_path = "C:\\Users\\alana\\Documents\\GitHub\\app-web\\bimbo-web\\src\\img\\gansito.png"  # Ruta del archivo en tu máquina local
-object_name = 'gansito.png'  # Nombre del archivo dentro del bucket
+folder_name = 'Almacen'  # Nombre de la carpeta en la que se guardará el archivo
+object_name = f'{folder_name}/gansito.png'  # Nombre del archivo dentro del bucket
+
+region = config['region']  # Región de tu bucket (extraída del archivo de configuración)
+
 
 try:
     # Abre el archivo que deseas subir
@@ -23,6 +27,9 @@ try:
             object_name,
             file_data
         )
+
+        # url = f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{bucket_name}/o/{object_name}"
+        # print(f"URL pública para acceder al objeto: {url}")
 
     print(f"El archivo '{file_path}' se ha subido correctamente a '{bucket_name}' con el nombre '{object_name}'.")
 except Exception as e:
