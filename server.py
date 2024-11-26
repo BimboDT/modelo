@@ -6,17 +6,27 @@ from ultralytics import YOLO    #type: ignore
 import cv2
 import requests   #type: ignore
 import numpy as np
+import oci  #type: ignore
+from oci.config import from_file    #type: ignore
+from oci.object_storage import ObjectStorageClient    #type: ignore
+from io import BytesIO
+
+# Configura el cliente de Object Storage
+config = oci.config.from_file()  # Carga la configuración desde el archivo .oci/config
+object_storage_client = ObjectStorageClient(config)
+
+# Parámetros de tu bucket
+namespace = object_storage_client.get_namespace().data  # Obtén el namespace en el que trabajar
+bucket_name = 'fotos-web'
+region = config['region']
+index = 0
 
 ## Server configuration
 server = Flask(__name__)
 CORS(server)
 
 # Cargar el modelo YOLO
-model = YOLO('best.pt')
-
-# Bucket URL (Oracle Cloud Storage)
-bucketUrl = "https://objectstorage.us-phoenix-1.oraclecloud.com/p/7hs26atNwRAfFpn_TAJK6PIEriKMfVtAnnROyQWxqCr0pELa62lbaKvFwVw4bxON/n/axxbc0j4otis/b/bimbucket/o/"
-
+model = YOLO('bestV3.pt')
 
 # Función para descargar la imagen desde una URL y convertirla al formato OpenCV
 def url_to_image(url):
@@ -29,15 +39,16 @@ def url_to_image(url):
         return None
 
 # Función para subir la imagen procesada a Oracle Cloud Storage
-def upload_image(bucket_url, image):
-    # Convertir la imagen a un formato compatible (PNG)
-    _, buffer = cv2.imencode('.png', image)
-    headers = {
-        "Content-Type": "image/png",
-        "Content-Disposition": "attachment; filename=Procesado.png"
-    }
-    response = requests.put(bucket_url, headers=headers, data=buffer.tobytes())
-    return response.status_code == 200
+def upload_image(namespace, bucket_name, object_name, image):
+    object_storage_client.put_object(
+        namespace,
+        bucket_name,
+        object_name,
+        image
+    )
+    url = f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{bucket_name}/o/{object_name}"
+    return url
+
 
 # Ruta de prueba
 @server.route('/test', methods=['GET'])
@@ -47,6 +58,10 @@ def test():
 # Ruta para predicción
 @server.route('/predict', methods=['POST'])
 def predictJSON():
+    global index
+
+    min_confidence = 0.6
+
 
     # Cargar la imagen
     data = request.json
@@ -57,39 +72,51 @@ def predictJSON():
     if image is None:
         return jsonify({"message": "No se pudo obtener la imagen desde la URL"}), 400
 
-    # Redimensionar la imagen a 640x640
-    img_rs = cv2.resize(image, (640, 640))
-
     # Realizar la inferencia con YOLO
-    results = model(img_rs)
+    results = model(image)
+
+    # Índices de las clases
+    caja_class_index = 0
+    oclusion_class_index = 1
+
+    detecciones_caja = 0
+    oclusion_detectada = False
 
     # Extraer información de detecciones
-    detections = []
     for box in results[0].boxes:
-        detections.append({
-            "confidence": float(box.conf),       # Confianza del modelo
-            "xmin": int(box.xyxy[0][0]),         # Coordenada superior izquierda en x
-            "ymin": int(box.xyxy[0][1]),         # Coordenada superior izquierda en y
-            "xmax": int(box.xyxy[0][2]),         # Coordenada inferior derecha en x
-            "ymax": int(box.xyxy[0][3])          # Coordenada inferior derecha en y
-        })
-        # Dibujar las cajas y etiquetas en la imagen
-        x1, y1, x2, y2 = map(int, box.xyxy[0])  # Coordenadas de la caja
-        score = box.conf[0]  # Confianza
-        label = f"Caja ({score:.2f})"
-        cv2.rectangle(img_rs, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        cv2.putText(img_rs, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (255, 0, 0), 2)
+        confidence = float(box.conf)  # Confianza de la predicción
+        class_id = int(box.cls)  # Clase
 
-    #uploadImage = upload_image(bucketUrl, img_rs)
-    detections = results[0].boxes
+        # Filtrar detecciones con confianza > min_confidence
+        if confidence > min_confidence:
+            if class_id == caja_class_index:
+                detecciones_caja += 1  # Contar detecciones de cajas
+            elif class_id == oclusion_class_index:
+                oclusion_detectada = True  # Detectar oclusiones
 
-    # if not uploadImage:
-    #     return jsonify({"error": "No se pudo subir la imagen procesada al bucket"}), 500
+            # Dibujar las cajas y etiquetas en la imagen
+            x1, y1, x2, y2 = map(int, box.xyxy[0])  # Coordenadas de la caja
+            label = f"Clase {class_id} ({confidence:.2f})"  # Etiqueta de cada detección
+            cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (255, 0, 0), 2)
 
-    # Devolver los resultados en formato JSON
-    return jsonify({'detections': len(detections)})
+    foto_binaria = cv2.imencode('.jpg', image)[1].tobytes()
+    file_data = BytesIO(foto_binaria)
+
+    # Subir la imagen procesada a Oracle Cloud Storage
+    url = upload_image(namespace, bucket_name, f"Procesado/image_{index}.jpg", file_data)
+    print(f"Imagen procesada subida a: {url}")
+    index = index + 1
+
+    # Devolver los resultados en formato JSON y la URL
+    # Número de cajas y Booleano de oclusiones
+    return jsonify({
+        'detecciones_caja': detecciones_caja,
+        'oclusion_detectada': oclusion_detectada,
+        'url': url})
+
 
 if __name__ == '__main__':
     # Iniciar el servidor
-    server.run(debug=False, host='0.0.0.0', port=8080)
+    server.run(debug=False, host='0.0.0.0', port=8081)

@@ -9,10 +9,9 @@ object_storage_client = ObjectStorageClient(config)
 # Parámetros de tu bucket
 namespace = object_storage_client.get_namespace().data  # Obtén el namespace en el que trabajar
 bucket_name = 'fotos-web'
-compartment_id=config['tenancy']
-file_path = "C:\\Users\\alana\\Documents\\GitHub\\app-web\\bimbo-web\\src\\img\\gansito.png"  # Ruta del archivo en tu máquina local
+file_path = "C:\\Users\\alana\\Downloads\\cajas.jpg"  # Ruta del archivo en tu máquina local
 folder_name = 'Almacen'  # Nombre de la carpeta en la que se guardará el archivo
-object_name = f'{folder_name}/gansito.png'  # Nombre del archivo dentro del bucket
+object_name = f'{folder_name}/cajas.jpg'  # Nombre del archivo dentro del bucket
 
 region = config['region']  # Región de tu bucket (extraída del archivo de configuración)
 
