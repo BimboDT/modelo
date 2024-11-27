@@ -10,6 +10,7 @@ import oci  #type: ignore
 from oci.config import from_file    #type: ignore
 from oci.object_storage import ObjectStorageClient    #type: ignore
 from io import BytesIO
+import base64
 
 # Configura el cliente de Object Storage
 config = oci.config.from_file()  # Carga la configuración desde el archivo .oci/config
@@ -49,11 +50,43 @@ def upload_image(namespace, bucket_name, object_name, image):
     url = f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{bucket_name}/o/{object_name}"
     return url
 
+def base64_to_image(base64_string):
+    """Decodifica una imagen en Base64 a un formato OpenCV."""
+    img_data = base64.b64decode(base64_string)
+    np_array = np.frombuffer(img_data, np.uint8)
+    image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+    return image
+
 
 # Ruta de prueba
 @server.route('/test', methods=['GET'])
 def test():
     return jsonify({"message": "API funcionando correctamente"}), 200
+
+@server.route('/uploadImage', methods=['POST'])
+def uploadJSON():
+    global index
+
+    # Cargar la imagen
+    data = request.json
+    imgBase64 = data['imageBase64']
+
+    if imgBase64 is None:
+        return jsonify({"message": "No se pudo obtener la imagen desde la URL"}), 400
+
+    # Decodificar la imagen base64
+    image = base64_to_image(imgBase64)
+
+    foto_binaria = cv2.imencode('.jpg', image)[1].tobytes()
+    file_data = BytesIO(foto_binaria)
+
+    # Subir la imagen procesada a Oracle Cloud Storage
+    url = upload_image(namespace, bucket_name, f"Procesado/image_{index}.jpg", file_data)
+    index = index + 1
+
+    # Devolver los resultados en formato JSON y la URL
+    # Número de cajas y Booleano de oclusiones
+    return jsonify({'url': url}), 200
 
 @server.route('/predict', methods=['POST'])
 def predictJSON():
