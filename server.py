@@ -153,4 +153,4 @@ def predictJSON():
 
 if __name__ == '__main__':
     # Iniciar el servidor
-    server.run(debug=False, host='0.0.0.0', port=8081)
+    server.run(debug=False, host='0.0.0.0', port=8082)
